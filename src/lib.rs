@@ -217,6 +217,24 @@ impl<T: Copy> Matrix<T> {
         Ok(())
     }
 
+    pub fn transpose(&mut self) {
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                if j < i {
+                    // SAFETY: x and y are aligned, non-null and non-overlapping.
+                    // The swap will incur no re-allocations or moves so Vec will not be
+                    // disturbed.
+                    unsafe {
+                        std::ptr::swap_nonoverlapping(
+                            &mut self[i][j] as *mut T,
+                            &mut self[j][i] as *mut T,
+                            1,
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     pub fn invert(&mut self) {
         todo!()
@@ -410,6 +428,16 @@ mod tests {
     fn from_vector() {
         let m1 = ok!(Matrix::try_from(vec![vec![1, 2], vec![3, 4]]));
         let m2 = Matrix::from([[1, 2], [3, 4]]);
+
+        assert_eq!(m1, m2);
+    }
+
+    #[test]
+    fn transpose() {
+        let mut m1 = Matrix::from([[1, 2], [3, 4]]);
+        let m2 = Matrix::from([[1, 3], [2, 4]]);
+
+        m1.transpose();
 
         assert_eq!(m1, m2);
     }
