@@ -2,10 +2,12 @@ use std::collections::VecDeque;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::{Iterator, Sum};
-use std::ops::{Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, Sub, SubAssign, Neg};
 
 use anyhow::{anyhow, Error};
 use num_traits::{One, Zero};
+
+// RAYON
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Matrix<T> {
@@ -236,6 +238,79 @@ impl<T: Copy> Matrix<T> {
         }
     }
 
+    pub fn minor(&mut self) -> T
+        where
+            T: Mul<Output = T> + Sub<Output = T>
+    {
+        // This function exists to find the minor which is a component of a 2x2 matrix
+        // Should the dimensions be checked?
+
+        let a1 = self[0][0];
+        let a2 = self[0][1];
+        let a3 = self[1][0];
+        let a4 = self[1][1];
+
+        (a1 * a4) - (a2 * a3)
+    }
+
+    pub fn get_sub_matrix(&self, curr_col: usize) -> Self{
+        let mut v: Vec<T> = Vec::new();
+        for i in 1..self.rows {
+            for j in 0..self.cols {
+                if j != curr_col {
+                    v.push(self[i][j]);
+                }
+            }
+        }
+
+        // TODO: Try changing to from_vec
+        Matrix::from_flat_vec(v, self.rows - 1, self.cols - 1).unwrap()
+    }
+
+    pub fn determinant(&mut self) -> T
+        where
+            T: Mul<Output = T>,
+            T: Sub<Output = T>,
+            T: AddAssign,
+            T: MulAssign,
+            T: Neg<Output = T>,
+            T: Zero
+    {
+        let mut sum: T = Zero::zero();
+
+        // If a 2x2 matrix just return the determinant
+        if self.rows == 2 && self.cols == 2 {
+            return self.minor();
+        }
+
+        // We will use row 1 for calculating the determinant (i.e. i stays as 0)
+        for j in 0..self.cols {
+            // Extract the sub-matrix not containing row i and column j
+            let mut sub_matrix = self.get_sub_matrix(j);
+            if sub_matrix.rows == 2 && sub_matrix.cols == 2 {
+                // Determinant of the 2x2 sub-matrix
+                let minor = sub_matrix.minor();
+                let mut cofactor = self[0][j] * minor;
+                // -1 ^ (i + j)
+                if j % 2 == 1 {
+                    cofactor = cofactor.neg();
+                }
+                sum += cofactor;
+            }
+            else {
+                // Recursive call to work towards finding the determinant of the 2x2 sub-matrices
+                let mut cofactor = self[0][j] * sub_matrix.determinant();
+                // -1 ^ (i + j)
+                if j % 2 == 1 {
+                    cofactor = cofactor.neg();
+                }
+                sum += cofactor;
+            }
+        }
+
+        sum
+    }
+
     pub fn invert(&mut self) {
         todo!()
     }
@@ -440,5 +515,26 @@ mod tests {
         m1.transpose();
 
         assert_eq!(m1, m2);
+    }
+
+    #[test]
+    fn minor() {
+        let mut m1 = Matrix::from([[1, 2], [3, 4]]);
+        let check = -2;
+
+        let res = m1.minor();
+
+        assert_eq!(res, check);
+    }
+
+    #[test]
+    fn determinant() {
+        let mut m1 = Matrix::from([[1, 2, 3, 4, 5], [3, 2, 4, 1, 5],
+            [5, 3, 2, 4, 1], [2, 4, 1, 5, 3], [3, 5, 2, 4, 1]]);
+        let check = 400;
+
+        let res = m1.determinant();
+
+        assert_eq!(res, check);
     }
 }
