@@ -86,11 +86,11 @@ impl<T: Copy> Matrix<T> {
         Self::from_flat_vec(res, n, n).unwrap()
     }
 
-    pub fn rows(&self) -> impl Iterator<Item = &Vec<T>> {
+    pub fn rows(&self) -> impl Iterator<Item=&Vec<T>> {
         self.elements.iter()
     }
 
-    pub fn cols(&self) -> impl Iterator<Item = Box<dyn Iterator<Item = T> + '_>> + '_ {
+    pub fn cols(&self) -> impl Iterator<Item=Box<dyn Iterator<Item=T> + '_>> + '_ {
         let mut iter_vec = Vec::new();
 
         for i in 0..self.cols {
@@ -98,14 +98,14 @@ impl<T: Copy> Matrix<T> {
                 self.elements
                     .iter()
                     .map(Box::new(move |row: &Vec<T>| row[i])),
-            ) as Box<dyn Iterator<Item = T>>);
+            ) as Box<dyn Iterator<Item=T>>);
         }
         iter_vec.into_iter()
     }
 
     pub fn add(&self, rhs: &Self) -> Result<Self, Error>
         where
-            T: Add<Output = T>,
+            T: Add<Output=T>,
     {
         self.element_wise_arithmetic_op(rhs, Add::add)
     }
@@ -119,7 +119,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn scalar_add(&self, rhs: T) -> Self
         where
-            T: Add<Output = T>,
+            T: Add<Output=T>,
     {
         self.scalar_op(rhs, Add::add)
     }
@@ -133,7 +133,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn sub(&self, rhs: &Self) -> Result<Self, Error>
         where
-            T: Sub<Output = T>,
+            T: Sub<Output=T>,
     {
         self.element_wise_arithmetic_op(rhs, std::ops::Sub::sub)
     }
@@ -147,7 +147,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn scalar_sub(&self, rhs: T) -> Self
         where
-            T: Sub<Output = T>,
+            T: Sub<Output=T>,
     {
         self.scalar_op(rhs, Sub::sub)
     }
@@ -161,7 +161,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn scalar_mul(&self, rhs: T) -> Self
         where
-            T: Mul<Output = T>,
+            T: Mul<Output=T>,
     {
         self.scalar_op(rhs, Mul::mul)
     }
@@ -175,7 +175,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn scalar_div(&self, rhs: T) -> Self
         where
-            T: Div<Output = T>,
+            T: Div<Output=T>,
     {
         self.scalar_op(rhs, Div::div)
     }
@@ -189,14 +189,14 @@ impl<T: Copy> Matrix<T> {
 
     pub fn hadamard_product(&self, rhs: &Self) -> Result<Self, Error>
         where
-            T: Mul<Output = T>,
+            T: Mul<Output=T>,
     {
         self.element_wise_arithmetic_op(rhs, Mul::mul)
     }
 
     pub fn mul(&self, rhs: &Self) -> Result<Self, Error>
         where
-            T: Mul<Output = T> + Sum,
+            T: Mul<Output=T> + Sum,
     {
         let mut result = Vec::new();
         for row in self.rows() {
@@ -212,7 +212,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn mul_assign(&mut self, rhs: &Self) -> Result<(), Error>
         where
-            T: Mul<Output = T> + Sum,
+            T: Mul<Output=T> + Sum,
     {
         // Have to create a copy here because in place multiplication is impossible
         *self = self.clone().mul(&rhs)?;
@@ -240,7 +240,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn minor(&mut self) -> T
         where
-            T: Mul<Output = T> + Sub<Output = T>
+            T: Mul<Output=T> + Sub<Output=T>
     {
         // This function exists to find the minor which is a component of a 2x2 matrix
         // Should the dimensions be checked?
@@ -253,16 +253,18 @@ impl<T: Copy> Matrix<T> {
         (a1 * a4) - (a2 * a3)
     }
 
-    pub fn get_sub_matrix(&self, curr_col: usize) -> Self{
+    pub fn get_sub_matrix(&self, curr_col: usize, curr_row: usize) -> Self {
         let mut v: Vec<Vec<T>> = Vec::new();
-        for i in 1..self.rows {
+        for i in 0..self.cols {
             let mut temp: Vec<T> = Vec::with_capacity(self.cols - 1);
-            for j in 0..self.cols {
-                if j != curr_col {
-                    temp.push(self[i][j]);
+            for j in 0..self.rows {
+                if i != curr_col && j != curr_row {
+                    temp.push(self[j][i]);
                 }
             }
-            v.push(temp);
+            if !(temp.is_empty()) {
+                v.push(temp);
+            }
         }
 
         Matrix::from_vec(v).unwrap()
@@ -270,11 +272,11 @@ impl<T: Copy> Matrix<T> {
 
     pub fn determinant(&mut self) -> T
         where
-            T: Mul<Output = T>,
-            T: Sub<Output = T>,
+            T: Mul<Output=T>,
+            T: Sub<Output=T>,
             T: AddAssign,
             T: MulAssign,
-            T: Neg<Output = T>,
+            T: Neg<Output=T>,
             T: Zero
     {
         let mut sum: T = Zero::zero();
@@ -287,7 +289,7 @@ impl<T: Copy> Matrix<T> {
         // We will use row 1 for calculating the determinant (i.e. i stays as 0)
         for j in 0..self.cols {
             // Extract the sub-matrix not containing row i and column j
-            let mut sub_matrix = self.get_sub_matrix(j);
+            let mut sub_matrix = self.get_sub_matrix(j, 0);
             if sub_matrix.rows == 2 && sub_matrix.cols == 2 {
                 // Determinant of the 2x2 sub-matrix
                 let minor = sub_matrix.minor();
@@ -297,8 +299,7 @@ impl<T: Copy> Matrix<T> {
                     cofactor = cofactor.neg();
                 }
                 sum += cofactor;
-            }
-            else {
+            } else {
                 // Recursive call to work towards finding the determinant of the 2x2 sub-matrices
                 let mut cofactor = self[0][j] * sub_matrix.determinant();
                 // -1 ^ (i + j)
@@ -311,6 +312,76 @@ impl<T: Copy> Matrix<T> {
 
         sum
     }
+
+    // For 2x2 and 3x3 matrices only
+    pub fn cofactor_matrix_simple(&mut self) -> Result<Self, Error>
+        where
+            T: Mul<Output=T>,
+            T: Sub<Output=T>,
+            T: AddAssign,
+            T: MulAssign,
+            T: Neg<Output=T>,
+            T: Zero
+    {
+        let mut cofactor_matrix: Vec<Vec<T>> = Vec::new();
+
+        // If a 2x2 matrix just return the default cofactor matrix
+        if self.rows == 2 && self.cols == 2 {
+            let temp: Vec<T> = vec![(self[1][1]), self[0][1].neg()];
+            cofactor_matrix.push(temp);
+            let temp2: Vec<T> = vec![self[1][0].neg(), self[0][0]];
+            cofactor_matrix.push(temp2);
+        }
+
+        // If a 3x3 matrix we cannot use the same determinant loop as the function
+        else {
+            for i in 0..self.cols {
+                let mut temp: Vec<T> = Vec::new();
+                for j in 0..self.rows {
+                    let mut sub_matrix = self.get_sub_matrix(i, j);
+                    // Determinant of the 2x2 sub-matrix
+                    let mut minor = sub_matrix.minor();
+                    // -1 ^ (i + j)
+                    if (i + j) % 2 == 1 {
+                        minor = minor.neg();
+                    }
+                    temp.push(minor);
+                }
+                cofactor_matrix.push(temp);
+            }
+        }
+        Matrix::from_vec(cofactor_matrix)
+    }
+
+    pub fn cofactor_matrix_complex(&mut self) -> Result<Self, Error>
+        where
+            T: Mul<Output=T>,
+            T: Sub<Output=T>,
+            T: AddAssign,
+            T: MulAssign,
+            T: Neg<Output=T>,
+            T: Zero
+    {
+        let mut cofactor_matrix: Vec<Vec<T>> = Vec::new();
+
+        // For anything greater than 3x3
+        for i in 0..self.cols {
+            let mut temp: Vec<T> = Vec::new();
+            for j in 0..self.rows {
+                // Extract the sub-matrix not containing row i and column j
+                let mut sub_matrix = self.get_sub_matrix(i, j);
+                let mut minor = sub_matrix.determinant();
+                if (i + j) % 2 == 1 {
+                    minor = minor.neg();
+                }
+                temp.push(minor);
+            }
+            cofactor_matrix.push(temp);
+        }
+
+        Matrix::from_vec(cofactor_matrix)
+    }
+
 
     pub fn invert(&mut self) {
         todo!()
@@ -538,4 +609,36 @@ mod tests {
 
         assert_eq!(res, check);
     }
+
+    #[test]
+    fn cofactor_2x2() {
+        let mut m1 = Matrix::from([[1, 2], [3, 4]]);
+        let m2 = Matrix::from([[4, -2], [-3, 1]]);
+
+        let res = ok!(m1.cofactor_matrix_simple());
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn cofactor_3x3() {
+        let mut m1 = Matrix::from([[1, 2, 3], [3, 1, 2], [4, 3, 1]]);
+        let m2 = Matrix::from([[-5, 7, 1], [5, -11, 7], [5, 5, -5]]);
+
+        let res = ok!(m1.cofactor_matrix_simple());
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn cofactor_4x4() {
+        let mut m1 = Matrix::from([[1, 2, 3, 4], [3, 1, 2, 4], [4, 2, 1, 3], [2, 4, 3, 1]]);
+        let m2 = Matrix::from([[20, -22, 5, -7], [-20, 38, -25, 3],
+            [20, -42, 35, -17], [-20, 18, -15, 13]]);
+
+        let res = ok!(m1.cofactor_matrix_complex());
+
+        assert_eq!(res, m2);
+    }
+
 }
