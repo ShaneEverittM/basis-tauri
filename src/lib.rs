@@ -254,17 +254,18 @@ impl<T: Copy> Matrix<T> {
     }
 
     pub fn get_sub_matrix(&self, curr_col: usize) -> Self{
-        let mut v: Vec<T> = Vec::new();
+        let mut v: Vec<Vec<T>> = Vec::new();
         for i in 1..self.rows {
+            let mut temp: Vec<T> = Vec::with_capacity(self.cols - 1);
             for j in 0..self.cols {
                 if j != curr_col {
-                    v.push(self[i][j]);
+                    temp.push(self[i][j]);
                 }
             }
+            v.push(temp);
         }
 
-        // TODO: Try changing to from_vec
-        Matrix::from_flat_vec(v, self.rows - 1, self.cols - 1).unwrap()
+        Matrix::from_vec(v).unwrap()
     }
 
     pub fn determinant(&mut self) -> T
@@ -531,7 +532,7 @@ mod tests {
     fn determinant() {
         let mut m1 = Matrix::from([[1, 2, 3, 4, 5], [3, 2, 4, 1, 5],
             [5, 3, 2, 4, 1], [2, 4, 1, 5, 3], [3, 5, 2, 4, 1]]);
-        let check = 400;
+        let check = 420;
 
         let res = m1.determinant();
 
