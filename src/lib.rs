@@ -383,8 +383,40 @@ impl<T: Copy> Matrix<T> {
     }
 
 
-    pub fn invert(&mut self) {
-        todo!()
+    pub fn invert(&mut self) -> Self
+        where
+            T: Mul<Output=T>,
+            T: Div<Output=T>,
+            T: DivAssign,
+            T: Sub<Output=T>,
+            T: AddAssign,
+            T: MulAssign,
+            T: Neg<Output=T>,
+            T: Zero + One
+
+    {
+        // First get the determinant
+        let determinant = self.determinant();
+
+        // Then get the cofactor matrix
+        let mut inverse_matrix;
+        if (self.rows == 2 && self.cols == 2) || (self.rows == 3 && self.cols == 3) {
+            inverse_matrix = self.cofactor_matrix_simple().unwrap();
+        }
+        else {
+            inverse_matrix = self.cofactor_matrix_complex().unwrap();
+        }
+
+        // If it is not a 2x2, transpose into the adjoined matrix
+        // if self.rows != 2 && self.cols != 2 {
+        //    inverse_matrix.transpose();
+        //}
+
+        // Scalar multiply by the reciprocal of the determinant
+        //let numerator: T = One::one();
+        //let scalar: T = numerator / determinant;
+        inverse_matrix.scalar_div_assign(determinant);
+        inverse_matrix
     }
 
     fn element_wise_arithmetic_op(
@@ -601,9 +633,8 @@ mod tests {
 
     #[test]
     fn determinant() {
-        let mut m1 = Matrix::from([[1, 2, 3, 4, 5], [3, 2, 4, 1, 5],
-            [5, 3, 2, 4, 1], [2, 4, 1, 5, 3], [3, 5, 2, 4, 1]]);
-        let check = 420;
+        let mut m1 = Matrix::from([[1, 2], [3, 4]]);
+        let check = -2;
 
         let res = m1.determinant();
 
@@ -637,6 +668,38 @@ mod tests {
             [20, -42, 35, -17], [-20, 18, -15, 13]]);
 
         let res = ok!(m1.cofactor_matrix_complex());
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_2x2() {
+        let mut m1 = Matrix::from([[1.0, 2.0], [3.0, 4.0]]);
+        let m2 = Matrix::from([[-2.0, 1.0], [1.5, -0.5]]);
+
+        let res = m1.invert();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_3x3() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0], [3.0, 1.0, 2.0], [4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.25, 0.35, 0.05], [0.25, -0.55, 0.35], [0.25, 0.25, -0.25]]);
+
+        let res = m1.invert();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_4x4() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert();
 
         assert_eq!(res, m2);
     }
