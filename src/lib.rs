@@ -327,14 +327,12 @@ impl<T: Copy> Matrix<T> {
 
         // If a 2x2 matrix just return the default cofactor matrix
         if self.rows == 2 && self.cols == 2 {
-            let temp: Vec<T> = vec![(self[1][1]), self[0][1].neg()];
-            cofactor_matrix.push(temp);
-            let temp2: Vec<T> = vec![self[1][0].neg(), self[0][0]];
-            cofactor_matrix.push(temp2);
-        }
-
-        // If a 3x3 matrix we cannot use the same determinant loop as the function
-        else {
+            cofactor_matrix = vec![
+                vec![(self[1][1]), self[0][1].neg()],
+                vec![self[1][0].neg(), self[0][0]]
+            ];
+        } else {
+            // If a 3x3 matrix we cannot use the same determinant loop as the function
             for i in 0..self.cols {
                 let mut temp: Vec<T> = Vec::new();
                 for j in 0..self.rows {
@@ -682,7 +680,7 @@ mod tests {
         let mut m1 = Matrix::from([[1.0, 2.0], [3.0, 4.0]]);
         let m2 = Matrix::from([[-2.0, 1.0], [1.5, -0.5]]);
 
-        let res = m1.invert();
+        let res = m1.invert().unwrap();
 
         assert_eq!(res, m2);
     }
@@ -692,7 +690,7 @@ mod tests {
         let mut m1 = Matrix::from([[1.0, 2.0, 3.0], [3.0, 1.0, 2.0], [4.0, 3.0, 1.0]]);
         let m2 = Matrix::from([[-0.25, 0.35, 0.05], [0.25, -0.55, 0.35], [0.25, 0.25, -0.25]]);
 
-        let res = m1.invert();
+        let res = m1.invert().unwrap();
 
         assert_eq!(res, m2);
     }
@@ -704,7 +702,7 @@ mod tests {
         let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
             [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
 
-        let res = m1.invert();
+        let res = m1.invert().unwrap();
 
         assert_eq!(res, m2);
     }
