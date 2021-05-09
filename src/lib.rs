@@ -383,7 +383,7 @@ impl<T: Copy> Matrix<T> {
     }
 
 
-    pub fn invert(&mut self) -> Self
+    pub fn invert(&mut self) -> Result<Self, Error>
         where
             T: Mul<Output = T>,
             T: Div<Output = T>,
@@ -401,9 +401,9 @@ impl<T: Copy> Matrix<T> {
         // Then get the cofactor matrix
         let mut inverse_matrix;
         if (self.rows == 2 && self.cols == 2) || (self.rows == 3 && self.cols == 3) {
-            inverse_matrix = self.cofactor_matrix_simple().unwrap();
+            inverse_matrix = self.cofactor_matrix_simple()?;
         } else {
-            inverse_matrix = self.cofactor_matrix_complex().unwrap();
+            inverse_matrix = self.cofactor_matrix_complex()?;
         }
 
         // If it is not a 2x2, transpose into the adjoined matrix
@@ -415,7 +415,7 @@ impl<T: Copy> Matrix<T> {
         //let numerator: T = One::one();
         //let scalar: T = numerator / determinant;
         inverse_matrix.scalar_div_assign(determinant);
-        inverse_matrix
+        Ok(inverse_matrix)
     }
 
     fn element_wise_arithmetic_op(
