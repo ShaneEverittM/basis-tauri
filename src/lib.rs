@@ -314,7 +314,7 @@ impl<T: Copy> Matrix<T> {
     }
 
     // For 2x2 and 3x3 matrices only
-    pub fn cofactor_matrix_simple(&mut self) -> Result<Self, Error>
+    pub fn cofactor_matrix(&mut self) -> Result<Self, Error>
         where
             T: Mul<Output = T>,
             T: Sub<Output = T>,
@@ -331,7 +331,7 @@ impl<T: Copy> Matrix<T> {
                 vec![(self[1][1]), self[0][1].neg()],
                 vec![self[1][0].neg(), self[0][0]]
             ];
-        } else {
+        } else if self.rows == 3 && self.cols == 3 {
             // If a 3x3 matrix we cannot use the same determinant loop as the function
             for i in 0..self.cols {
                 let mut temp: Vec<T> = Vec::new();
@@ -347,39 +347,24 @@ impl<T: Copy> Matrix<T> {
                 }
                 cofactor_matrix.push(temp);
             }
-        }
-        Matrix::from_vec(cofactor_matrix)
-    }
-
-    pub fn cofactor_matrix_complex(&mut self) -> Result<Self, Error>
-        where
-            T: Mul<Output = T>,
-            T: Sub<Output = T>,
-            T: AddAssign,
-            T: MulAssign,
-            T: Neg<Output = T>,
-            T: Zero
-    {
-        let mut cofactor_matrix: Vec<Vec<T>> = Vec::new();
-
-        // For anything greater than 3x3
-        for i in 0..self.cols {
-            let mut temp: Vec<T> = Vec::new();
-            for j in 0..self.rows {
-                // Extract the sub-matrix not containing row i and column j
-                let mut sub_matrix = self.get_sub_matrix(i, j);
-                let mut minor = sub_matrix.determinant();
-                if (i + j) % 2 == 1 {
-                    minor = minor.neg();
+        } else {
+            for i in 0..self.cols {
+                let mut temp: Vec<T> = Vec::new();
+                for j in 0..self.rows {
+                    // Extract the sub-matrix not containing row i and column j
+                    let mut sub_matrix = self.get_sub_matrix(i, j);
+                    let mut minor = sub_matrix.determinant();
+                    if (i + j) % 2 == 1 {
+                        minor = minor.neg();
+                    }
+                    temp.push(minor);
                 }
-                temp.push(minor);
+                cofactor_matrix.push(temp);
             }
-            cofactor_matrix.push(temp);
         }
 
         Matrix::from_vec(cofactor_matrix)
     }
-
 
     pub fn invert(&mut self) -> Result<Self, Error>
         where
@@ -398,16 +383,7 @@ impl<T: Copy> Matrix<T> {
 
         // Then get the cofactor matrix
         let mut inverse_matrix;
-        if (self.rows == 2 && self.cols == 2) || (self.rows == 3 && self.cols == 3) {
-            inverse_matrix = self.cofactor_matrix_simple()?;
-        } else {
-            inverse_matrix = self.cofactor_matrix_complex()?;
-        }
-
-        // If it is not a 2x2, transpose into the adjoined matrix
-        // if self.rows != 2 && self.cols != 2 {
-        //    inverse_matrix.transpose();
-        //}
+        inverse_matrix = self.cofactor_matrix()?;
 
         // Scalar multiply by the reciprocal of the determinant
         //let numerator: T = One::one();
@@ -649,7 +625,7 @@ mod tests {
         let mut m1 = Matrix::from([[1, 2], [3, 4]]);
         let m2 = Matrix::from([[4, -2], [-3, 1]]);
 
-        let res = ok!(m1.cofactor_matrix_simple());
+        let res = ok!(m1.cofactor_matrix());
 
         assert_eq!(res, m2);
     }
@@ -659,7 +635,7 @@ mod tests {
         let mut m1 = Matrix::from([[1, 2, 3], [3, 1, 2], [4, 3, 1]]);
         let m2 = Matrix::from([[-5, 7, 1], [5, -11, 7], [5, 5, -5]]);
 
-        let res = ok!(m1.cofactor_matrix_simple());
+        let res = ok!(m1.cofactor_matrix());
 
         assert_eq!(res, m2);
     }
@@ -670,7 +646,7 @@ mod tests {
         let m2 = Matrix::from([[20, -22, 5, -7], [-20, 38, -25, 3],
             [20, -42, 35, -17], [-20, 18, -15, 13]]);
 
-        let res = ok!(m1.cofactor_matrix_complex());
+        let res = ok!(m1.cofactor_matrix());
 
         assert_eq!(res, m2);
     }
