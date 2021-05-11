@@ -375,21 +375,28 @@ impl<T: Copy> Matrix<T> {
             T: AddAssign,
             T: MulAssign,
             T: Neg<Output = T>,
+            T: PartialEq,
             T: Zero + One
 
     {
         // First get the determinant
         let determinant = self.determinant();
 
-        // Then get the cofactor matrix
-        let mut inverse_matrix;
-        inverse_matrix = self.cofactor_matrix()?;
+        // If the determinant is zero the inverse does not exist, return an error
+        if determinant == Zero::zero() {
+            Err(anyhow!("Determinant is zero, the matrix is not invertible"))
+        } else {
 
-        // Scalar multiply by the reciprocal of the determinant
-        //let numerator: T = One::one();
-        //let scalar: T = numerator / determinant;
-        inverse_matrix.scalar_div_assign(determinant);
-        Ok(inverse_matrix)
+            // Then get the cofactor matrix
+            let mut inverse_matrix;
+            inverse_matrix = self.cofactor_matrix()?;
+
+            // Scalar multiply by the reciprocal of the determinant
+            //let numerator: T = One::one();
+            //let scalar: T = numerator / determinant;
+            inverse_matrix.scalar_div_assign(determinant);
+            Ok(inverse_matrix)
+        }
     }
 
     fn element_wise_arithmetic_op(
