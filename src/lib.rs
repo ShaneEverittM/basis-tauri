@@ -7,7 +7,6 @@ use std::ops::{Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, 
 use anyhow::{anyhow, Error};
 use num_traits::{One, Zero};
 
-// RAYON
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Matrix<T> {
