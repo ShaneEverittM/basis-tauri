@@ -9,5 +9,5 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.40"
 num-traits = "0.2.14"
-serde = { version = "1.0.126", optional = true }
+serde = { version = "^1.0.125", optional = true }
 
