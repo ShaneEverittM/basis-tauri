@@ -6,6 +6,8 @@ use std::ops::{Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, 
 
 use anyhow::{anyhow, Error};
 use num_traits::{One, Zero};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
