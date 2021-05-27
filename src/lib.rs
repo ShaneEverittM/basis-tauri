@@ -14,8 +14,16 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq)]
 pub struct Matrix<T> {
     elements: Vec<Vec<T>>,
-    rows: usize,
-    cols: usize,
+}
+
+impl<T> Matrix<T> {
+    pub fn num_rows(&self) -> usize {
+        self.elements.len()
+    }
+
+    pub fn num_cols(&self) -> usize {
+        self.elements.first().unwrap().len()
+    }
 }
 
 impl<T: Copy> Matrix<T> {
@@ -38,8 +46,6 @@ impl<T: Copy> Matrix<T> {
 
         Ok(Self {
             elements: acc,
-            rows,
-            cols,
         })
     }
 
@@ -51,21 +57,16 @@ impl<T: Copy> Matrix<T> {
 
         Self {
             elements,
-            rows: R,
-            cols: C,
         }
     }
 
     pub fn from_vec(elements: Vec<Vec<T>>) -> Result<Self, Error> {
-        let rows = elements.len();
         let cols = elements.first().unwrap().len();
         if elements.iter().any(|r| r.len() != cols) {
             Err(anyhow!("Bumpy matrix"))
         } else {
             Ok(Self {
                 elements,
-                rows,
-                cols,
             })
         }
     }
@@ -95,7 +96,7 @@ impl<T: Copy> Matrix<T> {
     pub fn cols(&self) -> impl Iterator<Item=Box<dyn Iterator<Item=T> + '_>> + '_ {
         let mut iter_vec = Vec::new();
 
-        for i in 0..self.cols {
+        for i in 0..self.num_cols() {
             iter_vec.push(Box::new(
                 self.elements
                     .iter()
@@ -222,8 +223,8 @@ impl<T: Copy> Matrix<T> {
     }
 
     pub fn transpose(&mut self) {
-        for i in 0..self.rows {
-            for j in 0..self.cols {
+        for i in 0..self.num_rows() {
+            for j in 0..self.num_cols() {
                 if j < i {
                     // SAFETY: x and y are aligned, non-null and non-overlapping.
                     // The swap will incur no re-allocations or moves so Vec will not be
@@ -257,9 +258,9 @@ impl<T: Copy> Matrix<T> {
 
     pub fn get_sub_matrix(&self, curr_col: usize, curr_row: usize) -> Self {
         let mut v: Vec<Vec<T>> = Vec::new();
-        for i in 0..self.cols {
-            let mut temp: Vec<T> = Vec::with_capacity(self.cols - 1);
-            for j in 0..self.rows {
+        for i in 0..self.num_cols() {
+            let mut temp: Vec<T> = Vec::with_capacity(self.num_cols() - 1);
+            for j in 0..self.num_rows() {
                 if i != curr_col && j != curr_row {
                     temp.push(self[j][i]);
                 }
@@ -284,15 +285,15 @@ impl<T: Copy> Matrix<T> {
         let mut sum: T = Zero::zero();
 
         // If a 2x2 matrix just return the determinant
-        if self.rows == 2 && self.cols == 2 {
+        if self.num_rows() == 2 && self.num_cols() == 2 {
             return self.minor();
         }
 
         // We will use row 1 for calculating the determinant (i.e. i stays as 0)
-        for j in 0..self.cols {
+        for j in 0..self.num_cols() {
             // Extract the sub-matrix not containing row i and column j
             let mut sub_matrix = self.get_sub_matrix(j, 0);
-            if sub_matrix.rows == 2 && sub_matrix.cols == 2 {
+            if sub_matrix.num_rows() == 2 && sub_matrix.num_cols() == 2 {
                 // Determinant of the 2x2 sub-matrix
                 let minor = sub_matrix.minor();
                 let mut cofactor = self[0][j] * minor;
@@ -328,16 +329,16 @@ impl<T: Copy> Matrix<T> {
         let mut cofactor_matrix: Vec<Vec<T>> = Vec::new();
 
         // If a 2x2 matrix just return the default cofactor matrix
-        if self.rows == 2 && self.cols == 2 {
+        if self.num_rows() == 2 && self.num_cols() == 2 {
             cofactor_matrix = vec![
                 vec![(self[1][1]), self[0][1].neg()],
                 vec![self[1][0].neg(), self[0][0]]
             ];
-        } else if self.rows == 3 && self.cols == 3 {
+        } else if self.num_rows() == 3 && self.num_cols() == 3 {
             // If a 3x3 matrix we cannot use the same determinant loop as the function
-            for i in 0..self.cols {
+            for i in 0..self.num_cols() {
                 let mut temp: Vec<T> = Vec::new();
-                for j in 0..self.rows {
+                for j in 0..self.num_rows() {
                     let mut sub_matrix = self.get_sub_matrix(i, j);
                     // Determinant of the 2x2 sub-matrix
                     let mut minor = sub_matrix.minor();
@@ -350,9 +351,9 @@ impl<T: Copy> Matrix<T> {
                 cofactor_matrix.push(temp);
             }
         } else {
-            for i in 0..self.cols {
+            for i in 0..self.num_cols() {
                 let mut temp: Vec<T> = Vec::new();
-                for j in 0..self.rows {
+                for j in 0..self.num_rows() {
                     // Extract the sub-matrix not containing row i and column j
                     let mut sub_matrix = self.get_sub_matrix(i, j);
                     let mut minor = sub_matrix.determinant();
@@ -454,8 +455,8 @@ impl<T: Copy> Matrix<T> {
     }
 
     fn dims_match(&self, other: &Self) -> Result<(usize, usize), Error> {
-        if self.rows == other.rows && self.cols == other.cols {
-            Ok((self.rows, self.cols))
+        if self.num_rows() == other.num_rows() && self.num_cols() == other.num_cols() {
+            Ok((self.num_rows(), self.num_cols()))
         } else {
             Err(anyhow!("Dimension mismatch"))
         }
