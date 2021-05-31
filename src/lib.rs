@@ -6,14 +6,24 @@ use std::ops::{Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, 
 
 use anyhow::{anyhow, Error};
 use num_traits::{One, Zero};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
-// RAYON
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Matrix<T> {
     elements: Vec<Vec<T>>,
-    rows: usize,
-    cols: usize,
+}
+
+impl<T> Matrix<T> {
+    pub fn num_rows(&self) -> usize {
+        self.elements.len()
+    }
+
+    pub fn num_cols(&self) -> usize {
+        self.elements.first().unwrap().len()
+    }
 }
 
 impl<T: Copy> Matrix<T> {
@@ -36,8 +46,6 @@ impl<T: Copy> Matrix<T> {
 
         Ok(Self {
             elements: acc,
-            rows,
-            cols,
         })
     }
 
@@ -49,21 +57,16 @@ impl<T: Copy> Matrix<T> {
 
         Self {
             elements,
-            rows: R,
-            cols: C,
         }
     }
 
     pub fn from_vec(elements: Vec<Vec<T>>) -> Result<Self, Error> {
-        let rows = elements.len();
         let cols = elements.first().unwrap().len();
         if elements.iter().any(|r| r.len() != cols) {
             Err(anyhow!("Bumpy matrix"))
         } else {
             Ok(Self {
                 elements,
-                rows,
-                cols,
             })
         }
     }
@@ -86,26 +89,26 @@ impl<T: Copy> Matrix<T> {
         Self::from_flat_vec(res, n, n).unwrap()
     }
 
-    pub fn rows(&self) -> impl Iterator<Item = &Vec<T>> {
+    pub fn rows(&self) -> impl Iterator<Item=&Vec<T>> {
         self.elements.iter()
     }
 
-    pub fn cols(&self) -> impl Iterator<Item = Box<dyn Iterator<Item = T> + '_>> + '_ {
+    pub fn cols(&self) -> impl Iterator<Item=Box<dyn Iterator<Item=T> + '_>> + '_ {
         let mut iter_vec = Vec::new();
 
-        for i in 0..self.cols {
+        for i in 0..self.num_cols() {
             iter_vec.push(Box::new(
                 self.elements
                     .iter()
                     .map(Box::new(move |row: &Vec<T>| row[i])),
-            ) as Box<dyn Iterator<Item = T>>);
+            ) as Box<dyn Iterator<Item=T>>);
         }
         iter_vec.into_iter()
     }
 
     pub fn add(&self, rhs: &Self) -> Result<Self, Error>
         where
-            T: Add<Output = T>,
+            T: Add<Output=T>,
     {
         self.element_wise_arithmetic_op(rhs, Add::add)
     }
@@ -119,7 +122,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn scalar_add(&self, rhs: T) -> Self
         where
-            T: Add<Output = T>,
+            T: Add<Output=T>,
     {
         self.scalar_op(rhs, Add::add)
     }
@@ -133,7 +136,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn sub(&self, rhs: &Self) -> Result<Self, Error>
         where
-            T: Sub<Output = T>,
+            T: Sub<Output=T>,
     {
         self.element_wise_arithmetic_op(rhs, std::ops::Sub::sub)
     }
@@ -147,7 +150,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn scalar_sub(&self, rhs: T) -> Self
         where
-            T: Sub<Output = T>,
+            T: Sub<Output=T>,
     {
         self.scalar_op(rhs, Sub::sub)
     }
@@ -161,7 +164,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn scalar_mul(&self, rhs: T) -> Self
         where
-            T: Mul<Output = T>,
+            T: Mul<Output=T>,
     {
         self.scalar_op(rhs, Mul::mul)
     }
@@ -175,7 +178,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn scalar_div(&self, rhs: T) -> Self
         where
-            T: Div<Output = T>,
+            T: Div<Output=T>,
     {
         self.scalar_op(rhs, Div::div)
     }
@@ -189,14 +192,14 @@ impl<T: Copy> Matrix<T> {
 
     pub fn hadamard_product(&self, rhs: &Self) -> Result<Self, Error>
         where
-            T: Mul<Output = T>,
+            T: Mul<Output=T>,
     {
         self.element_wise_arithmetic_op(rhs, Mul::mul)
     }
 
     pub fn mul(&self, rhs: &Self) -> Result<Self, Error>
         where
-            T: Mul<Output = T> + Sum,
+            T: Mul<Output=T> + Sum,
     {
         let mut result = Vec::new();
         for row in self.rows() {
@@ -212,7 +215,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn mul_assign(&mut self, rhs: &Self) -> Result<(), Error>
         where
-            T: Mul<Output = T> + Sum,
+            T: Mul<Output=T> + Sum,
     {
         // Have to create a copy here because in place multiplication is impossible
         *self = self.clone().mul(&rhs)?;
@@ -220,8 +223,8 @@ impl<T: Copy> Matrix<T> {
     }
 
     pub fn transpose(&mut self) {
-        for i in 0..self.rows {
-            for j in 0..self.cols {
+        for i in 0..self.num_rows() {
+            for j in 0..self.num_cols() {
                 if j < i {
                     // SAFETY: x and y are aligned, non-null and non-overlapping.
                     // The swap will incur no re-allocations or moves so Vec will not be
@@ -240,7 +243,7 @@ impl<T: Copy> Matrix<T> {
 
     pub fn minor(&mut self) -> T
         where
-            T: Mul<Output = T> + Sub<Output = T>
+            T: Mul<Output=T> + Sub<Output=T>
     {
         // This function exists to find the minor which is a component of a 2x2 matrix
         // Should the dimensions be checked?
@@ -255,9 +258,9 @@ impl<T: Copy> Matrix<T> {
 
     pub fn get_sub_matrix(&self, curr_col: usize, curr_row: usize) -> Self {
         let mut v: Vec<Vec<T>> = Vec::new();
-        for i in 0..self.cols {
-            let mut temp: Vec<T> = Vec::with_capacity(self.cols - 1);
-            for j in 0..self.rows {
+        for i in 0..self.num_cols() {
+            let mut temp: Vec<T> = Vec::with_capacity(self.num_cols() - 1);
+            for j in 0..self.num_rows() {
                 if i != curr_col && j != curr_row {
                     temp.push(self[j][i]);
                 }
@@ -272,25 +275,25 @@ impl<T: Copy> Matrix<T> {
 
     pub fn determinant(&mut self) -> T
         where
-            T: Mul<Output = T>,
-            T: Sub<Output = T>,
+            T: Mul<Output=T>,
+            T: Sub<Output=T>,
             T: AddAssign,
             T: MulAssign,
-            T: Neg<Output = T>,
+            T: Neg<Output=T>,
             T: Zero
     {
         let mut sum: T = Zero::zero();
 
         // If a 2x2 matrix just return the determinant
-        if self.rows == 2 && self.cols == 2 {
+        if self.num_rows() == 2 && self.num_cols() == 2 {
             return self.minor();
         }
 
         // We will use row 1 for calculating the determinant (i.e. i stays as 0)
-        for j in 0..self.cols {
+        for j in 0..self.num_cols() {
             // Extract the sub-matrix not containing row i and column j
             let mut sub_matrix = self.get_sub_matrix(j, 0);
-            if sub_matrix.rows == 2 && sub_matrix.cols == 2 {
+            if sub_matrix.num_rows() == 2 && sub_matrix.num_cols() == 2 {
                 // Determinant of the 2x2 sub-matrix
                 let minor = sub_matrix.minor();
                 let mut cofactor = self[0][j] * minor;
@@ -316,26 +319,26 @@ impl<T: Copy> Matrix<T> {
     // For 2x2 and 3x3 matrices only
     pub fn cofactor_matrix(&mut self) -> Result<Self, Error>
         where
-            T: Mul<Output = T>,
-            T: Sub<Output = T>,
+            T: Mul<Output=T>,
+            T: Sub<Output=T>,
             T: AddAssign,
             T: MulAssign,
-            T: Neg<Output = T>,
+            T: Neg<Output=T>,
             T: Zero
     {
         let mut cofactor_matrix: Vec<Vec<T>> = Vec::new();
 
         // If a 2x2 matrix just return the default cofactor matrix
-        if self.rows == 2 && self.cols == 2 {
+        if self.num_rows() == 2 && self.num_cols() == 2 {
             cofactor_matrix = vec![
                 vec![(self[1][1]), self[0][1].neg()],
                 vec![self[1][0].neg(), self[0][0]]
             ];
-        } else if self.rows == 3 && self.cols == 3 {
+        } else if self.num_rows() == 3 && self.num_cols() == 3 {
             // If a 3x3 matrix we cannot use the same determinant loop as the function
-            for i in 0..self.cols {
+            for i in 0..self.num_cols() {
                 let mut temp: Vec<T> = Vec::new();
-                for j in 0..self.rows {
+                for j in 0..self.num_rows() {
                     let mut sub_matrix = self.get_sub_matrix(i, j);
                     // Determinant of the 2x2 sub-matrix
                     let mut minor = sub_matrix.minor();
@@ -348,9 +351,9 @@ impl<T: Copy> Matrix<T> {
                 cofactor_matrix.push(temp);
             }
         } else {
-            for i in 0..self.cols {
+            for i in 0..self.num_cols() {
                 let mut temp: Vec<T> = Vec::new();
-                for j in 0..self.rows {
+                for j in 0..self.num_rows() {
                     // Extract the sub-matrix not containing row i and column j
                     let mut sub_matrix = self.get_sub_matrix(i, j);
                     let mut minor = sub_matrix.determinant();
@@ -368,13 +371,13 @@ impl<T: Copy> Matrix<T> {
 
     pub fn invert(&mut self) -> Result<Self, Error>
         where
-            T: Mul<Output = T>,
-            T: Div<Output = T>,
+            T: Mul<Output=T>,
+            T: Div<Output=T>,
             T: DivAssign,
-            T: Sub<Output = T>,
+            T: Sub<Output=T>,
             T: AddAssign,
             T: MulAssign,
-            T: Neg<Output = T>,
+            T: Neg<Output=T>,
             T: PartialEq,
             T: Zero + One
 
@@ -398,7 +401,13 @@ impl<T: Copy> Matrix<T> {
             Ok(inverse_matrix)
         }
     }
+    /*
+        fn check_symmetric(&mut self) {
+            let mut copy: &Matrix<T> = &*self;
+            copy.transpose();
 
+        }
+    */
     fn element_wise_arithmetic_op(
         &self,
         rhs: &Self,
@@ -446,8 +455,8 @@ impl<T: Copy> Matrix<T> {
     }
 
     fn dims_match(&self, other: &Self) -> Result<(usize, usize), Error> {
-        if self.rows == other.rows && self.cols == other.cols {
-            Ok((self.rows, self.cols))
+        if self.num_rows() == other.num_rows() && self.num_cols() == other.num_cols() {
+            Ok((self.num_rows(), self.num_cols()))
         } else {
             Err(anyhow!("Dimension mismatch"))
         }
@@ -680,6 +689,198 @@ mod tests {
 
     #[test]
     fn inverse_4x4() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_5x5() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_6x6() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_7x7() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_8x8() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_9x9() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_10x10() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_11x11() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_12x12() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_13x13() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_14x14() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_15x15() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_16x16() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_17x17() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_18x18() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_19x19() {
+        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
+            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
+        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
+            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
+
+        let res = m1.invert().unwrap();
+
+        assert_eq!(res, m2);
+    }
+
+    #[test]
+    fn inverse_20x20() {
         let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
             [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
         let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
