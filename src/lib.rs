@@ -719,7 +719,7 @@ mod tests {
 
         let C = Matrix::from([[9, 9, 9, 9], [9, 9, 9, 9]]);
 
-        //assert_eq!(C, ok!(A.add(&B)));
+        assert_eq!(C, ok!(A.add(&B)));
 
         ok!(A.add_assign(&B));
 
@@ -757,11 +757,11 @@ mod tests {
         let mut A = Matrix::from([[6, 8, 4], [12, 14, 26], [54, 90, 84]]);
         let b = 2;
 
-        //let C = A.scalar_div(b);
+        let C = A.scalar_div(b);
 
         let D = Matrix::from([[3, 4, 2], [6, 7, 13], [27, 45, 42]]);
 
-        //assert_eq!(C, D);
+        assert_eq!(C, D);
 
         A.scalar_div_assign(b);
 
