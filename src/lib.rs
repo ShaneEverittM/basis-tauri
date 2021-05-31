@@ -197,9 +197,34 @@ impl<T: Copy> Matrix<T> {
         self.element_wise_arithmetic_op(rhs, Mul::mul)
     }
 
+    //Multiplication function call with avx2 and non-avx2 implementations
     pub fn mul(&self, rhs: &Self) -> Result<Self, Error>
         where
-            T: Mul<Output=T> + Sum,
+            T: Mul<Output = T> + Sum,
+    {
+       #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
+           if is_x86_feature_detected!("avx2") {
+               return unsafe { self.mul_avx2(rhs) };
+           }
+       }
+
+        self.mul_default(rhs)
+    }
+
+    //AVX2 exists on the current machine
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[target_feature(enable = "avx2")]
+    unsafe fn mul_avx2(&self, rhs: &Self) -> Result<Self, Error>
+        where
+            T: Mul<Output = T> + Sum,
+    {
+        self.mul_default(rhs)
+    }
+
+    //The multiplication logic
+    pub fn mul_default(&self, rhs: &Self) -> Result<Self, Error>
+        where
+            T: Mul<Output = T> + Sum,
     {
         let mut result = Vec::new();
         for row in self.rows() {
@@ -222,6 +247,7 @@ impl<T: Copy> Matrix<T> {
         Ok(())
     }
 
+    //Don't need to do optimization checking as this function would not benefit from it
     pub fn transpose(&mut self) {
         for i in 0..self.num_rows() {
             for j in 0..self.num_cols() {
@@ -257,6 +283,22 @@ impl<T: Copy> Matrix<T> {
     }
 
     pub fn get_sub_matrix(&self, curr_col: usize, curr_row: usize) -> Self {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
+            if is_x86_feature_detected!("avx2") {
+                return unsafe { self.get_sub_matrix_avx2(curr_col, curr_row) };
+            }
+        }
+
+        self.get_sub_matrix_default(curr_col, curr_row)
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[target_feature(enable = "avx2")]
+    unsafe fn get_sub_matrix_avx2(&self, curr_col: usize, curr_row: usize) -> Self {
+        self.get_sub_matrix_default(curr_col, curr_row)
+    }
+
+    pub fn get_sub_matrix_default(&self, curr_col: usize, curr_row: usize) -> Self {
         let mut v: Vec<Vec<T>> = Vec::new();
         for i in 0..self.num_cols() {
             let mut temp: Vec<T> = Vec::with_capacity(self.num_cols() - 1);
@@ -274,6 +316,39 @@ impl<T: Copy> Matrix<T> {
     }
 
     pub fn determinant(&mut self) -> T
+        where
+        T: Mul<Output = T>,
+        T: Sub<Output = T>,
+        T: AddAssign,
+        T: MulAssign,
+        T: Neg<Output = T>,
+        T: Zero
+    {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
+            if is_x86_feature_detected!("avx2") {
+                return unsafe { self.determinant_avx2() };
+            }
+        }
+
+        self.determinant_default()
+
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[target_feature(enable = "avx2")]
+    unsafe fn determinant_avx2(&mut self) -> T
+        where
+        T: Mul<Output = T>,
+        T: Sub<Output = T>,
+        T: AddAssign,
+        T: MulAssign,
+        T: Neg<Output = T>,
+        T: Zero
+    {
+        self.determinant_default()
+    }
+
+    pub fn determinant_default(&mut self) -> T
         where
             T: Mul<Output=T>,
             T: Sub<Output=T>,
@@ -316,8 +391,40 @@ impl<T: Copy> Matrix<T> {
         sum
     }
 
-    // For 2x2 and 3x3 matrices only
     pub fn cofactor_matrix(&mut self) -> Result<Self, Error>
+        where
+            T: Mul<Output = T>,
+            T: Sub<Output = T>,
+            T: AddAssign,
+            T: MulAssign,
+            T: Neg<Output = T>,
+            T: Zero
+    {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
+            if is_x86_feature_detected!("avx2") {
+                return unsafe { self.cofactor_matrix_avx2() };
+            }
+        }
+
+        self.cofactor_matrix_default()
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[target_feature(enable = "avx2")]
+    unsafe fn cofactor_matrix_avx2(&mut self) -> Result<Self, Error>
+        where
+            T: Mul<Output = T>,
+            T: Sub<Output = T>,
+            T: AddAssign,
+            T: MulAssign,
+            T: Neg<Output = T>,
+            T: Zero
+    {
+       self.cofactor_matrix_default()
+    }
+
+    // For 2x2 and 3x3 matrices only
+    pub fn cofactor_matrix_default(&mut self) -> Result<Self, Error>
         where
             T: Mul<Output=T>,
             T: Sub<Output=T>,
@@ -401,14 +508,32 @@ impl<T: Copy> Matrix<T> {
             Ok(inverse_matrix)
         }
     }
-    /*
-        fn check_symmetric(&mut self) {
-            let mut copy: &Matrix<T> = &*self;
-            copy.transpose();
 
-        }
-    */
     fn element_wise_arithmetic_op(
+        &self,
+        rhs: &Self,
+        op: impl Fn(T, T) -> T,
+    ) -> Result<Self, Error> {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
+            if is_x86_feature_detected!("avx2") {
+                return unsafe { self.element_wise_arithmetic_op_avx2(rhs, op) };
+            }
+        }
+
+        self.element_wise_arithmetic_op_default(rhs, op)
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[target_feature(enable = "avx2")]
+    unsafe fn element_wise_arithmetic_op_avx2(
+        &self,
+        rhs: &Self,
+        op: impl Fn(T, T) -> T,
+    ) -> Result<Self, Error> {
+        self.element_wise_arithmetic_op_default(rhs, op)
+    }
+
+    fn element_wise_arithmetic_op_default(
         &self,
         rhs: &Self,
         op: impl Fn(T, T) -> T,
@@ -430,6 +555,30 @@ impl<T: Copy> Matrix<T> {
     fn element_wise_update_op(
         &mut self,
         rhs: &Self,
+        op: impl FnMut(&mut T, T),
+    ) -> Result<(), Error> {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
+            if is_x86_feature_detected!("avx2") {
+                return unsafe { self.element_wise_update_op_avx2(rhs, op) };
+            }
+        }
+
+        self.element_wise_update_op_default(rhs, op)
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[target_feature(enable = "avx2")]
+    unsafe fn element_wise_update_op_avx2(
+        &mut self,
+        rhs: &Self,
+        op: impl FnMut(&mut T, T),
+    ) -> Result<(), Error> {
+        self.element_wise_update_op_default(rhs, op)
+    }
+
+    fn element_wise_update_op_default(
+        &mut self,
+        rhs: &Self,
         mut op: impl FnMut(&mut T, T),
     ) -> Result<(), Error> {
         self.dims_match(&rhs)?;
@@ -443,6 +592,22 @@ impl<T: Copy> Matrix<T> {
     }
 
     fn scalar_op(&self, rhs: T, op: impl Fn(T, T) -> T) -> Self {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
+            if is_x86_feature_detected!("avx2") {
+                return unsafe { self.scalar_op_avx2(rhs, op) };
+            }
+        }
+
+        self.scalar_op_default(rhs, op)
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[target_feature(enable = "avx2")]
+    unsafe fn scalar_op_avx2(&self, rhs: T, op: impl Fn(T, T) -> T) -> Self {
+        self.scalar_op_default(rhs, op)
+    }
+
+    fn scalar_op_default(&self, rhs: T, op: impl Fn(T, T) -> T) -> Self {
         self.iter()
             .map(|row| row.iter().map(|&e| op(e, rhs)).collect::<Vec<T>>())
             .collect::<Vec<Vec<T>>>()
@@ -450,7 +615,23 @@ impl<T: Copy> Matrix<T> {
             .expect("Matrix is bumpy :^(")
     }
 
-    fn scalar_update_op(&mut self, rhs: T, mut op: impl FnMut(&mut T, T)) {
+    fn scalar_update_op(&mut self, rhs: T, op: impl FnMut(&mut T, T)) {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
+            if is_x86_feature_detected!("avx2") {
+                return unsafe { self.scalar_update_op_avx2(rhs, op) };
+            }
+        }
+
+        self.scalar_update_op_default(rhs, op);
+    }
+
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[target_feature(enable = "avx2")]
+    unsafe fn scalar_update_op_avx2(&mut self, rhs: T, op: impl FnMut(&mut T, T)) {
+        self.scalar_update_op_default(rhs, op)
+    }
+
+    fn scalar_update_op_default(&mut self, rhs: T, mut op: impl FnMut(&mut T, T)) {
         self.iter_mut().flatten().for_each(|e| op(e, rhs))
     }
 
@@ -538,7 +719,7 @@ mod tests {
 
         let C = Matrix::from([[9, 9, 9, 9], [9, 9, 9, 9]]);
 
-        assert_eq!(C, ok!(A.add(&B)));
+        //assert_eq!(C, ok!(A.add(&B)));
 
         ok!(A.add_assign(&B));
 
@@ -572,6 +753,34 @@ mod tests {
     }
 
     #[test]
+    fn division() {
+        let mut A = Matrix::from([[6, 8, 4], [12, 14, 26], [54, 90, 84]]);
+        let b = 2;
+
+        //let C = A.scalar_div(b);
+
+        let D = Matrix::from([[3, 4, 2], [6, 7, 13], [27, 45, 42]]);
+
+        //assert_eq!(C, D);
+
+        A.scalar_div_assign(b);
+
+        assert_eq!(A, D);
+    }
+
+    #[test]
+    fn hadamard() {
+        let A = Matrix::from([[2, 3, 1, 2], [3, 2, 2, 1], [1, 2, 3, 2], [2, 2, 1, 3]]);
+        let B = Matrix::from([[2, 2, 1, 3], [1, 2, 3, 2], [3, 2, 2, 1], [2, 3, 1, 2]]);
+
+        let C = ok!(A.hadamard_product(&B));
+
+        let D = Matrix::from([[4, 6, 1, 6], [3, 4, 6, 2], [3, 4, 6, 2], [4, 6, 1, 6]]);
+
+        assert_eq!(C, D);
+    }
+
+    #[test]
     fn identity() {
         let identity = Matrix::identity(5);
         let manual_identity = Matrix::from([
@@ -588,12 +797,15 @@ mod tests {
 
     #[test]
     fn multiply() {
-        let A = Matrix::from([[1, 2], [3, 4]]);
-        let B = Matrix::from([[1, 3], [2, 4]]);
+        let A = Matrix::from([[1, 2, 3, 4, 5], [3, 2, 1, 4, 5], [3, 2, 1, 2, 3],
+        [4, 5, 4, 3, 2], [5, 4, 3, 2, 3]]);
+        let B = Matrix::from([[1, 2, 3, 5, 4], [3, 2, 1, 3, 4], [4, 3, 2, 4, 2],
+        [1, 4, 5, 3, 2], [4, 3, 1, 5, 4]]);
 
         let C = ok!(A.mul(&B));
 
-        let D: Matrix<i32> = Matrix::from([[5, 11], [11, 25]]);
+        let D: Matrix<i32> = Matrix::from([[43, 46, 36, 60, 46], [37, 44, 38, 62, 50],
+            [27, 30, 26, 46, 38], [46, 48, 42, 70, 58], [43, 44, 38, 70, 58]]);
 
         assert_eq!(C, D);
     }
@@ -608,8 +820,12 @@ mod tests {
 
     #[test]
     fn transpose() {
-        let mut m1 = Matrix::from([[1, 2], [3, 4]]);
-        let m2 = Matrix::from([[1, 3], [2, 4]]);
+        let mut m1 = Matrix::from([[1, 2, 3, 4 ,5, 6, 7, 8], [2, 4, 5, 6, 7, 4, 3, 1],
+        [5, 6, 7, 2, 3, 4, 1, 5], [7, 6, 4, 2, 5, 6, 2, 1], [2, 3, 4, 5, 6, 7, 6, 5], [3, 4, 2, 1, 5, 4, 3, 6],
+        [5, 4, 3, 7, 8, 6, 5, 4], [2, 1, 3, 4, 6, 4, 2, 1]]);
+        let m2 = Matrix::from([[1, 2, 5, 7, 2, 3, 5, 2], [2, 4, 6, 6, 3, 4, 4, 1],
+        [3, 5, 7, 4, 4, 2, 3, 3], [4, 6, 2, 2, 5, 1, 7, 4], [5, 7, 3, 5, 6, 5, 8, 6], [6, 4, 4, 6, 7, 4, 6, 4],
+        [7, 3, 1, 2, 6, 3, 5, 2], [8, 1, 5, 1, 5, 6, 4, 1]]);
 
         m1.transpose();
 
@@ -628,8 +844,9 @@ mod tests {
 
     #[test]
     fn determinant() {
-        let mut m1 = Matrix::from([[1, 2], [3, 4]]);
-        let check = -2;
+        let mut m1 = Matrix::from([[1, 2, 3, 4, 5], [3, 2, 4, 5, 1], [2, 3, 4, 1, 5],
+        [2, 3, 4, 1, 4], [3, 2, 3, 5, 4]]);
+        let check = 21;
 
         let res = m1.determinant();
 
@@ -689,198 +906,6 @@ mod tests {
 
     #[test]
     fn inverse_4x4() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_5x5() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_6x6() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_7x7() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_8x8() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_9x9() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_10x10() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_11x11() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_12x12() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_13x13() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_14x14() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_15x15() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_16x16() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_17x17() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_18x18() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_19x19() {
-        let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
-            [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
-        let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
-            [-0.5, 1.05, -0.875, 0.425], [0.5, -0.45, 0.375, -0.325]]);
-
-        let res = m1.invert().unwrap();
-
-        assert_eq!(res, m2);
-    }
-
-    #[test]
-    fn inverse_20x20() {
         let mut m1 = Matrix::from([[1.0, 2.0, 3.0, 4.0], [3.0, 1.0, 2.0, 4.0],
             [4.0, 2.0, 1.0, 3.0], [2.0, 4.0, 3.0, 1.0]]);
         let m2 = Matrix::from([[-0.5, 0.55, -0.125, 0.175], [0.5, -0.95, 0.625, -0.075],
