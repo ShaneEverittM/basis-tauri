@@ -315,7 +315,7 @@ impl<T: Copy> Matrix<T> {
         Matrix::from_vec(v).unwrap()
     }
 
-    pub fn determinant(&mut self) -> T
+    pub fn determinant(&mut self) -> Result<T, Error>
         where
         T: Mul<Output = T>,
         T: Sub<Output = T>,
@@ -336,7 +336,7 @@ impl<T: Copy> Matrix<T> {
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     #[target_feature(enable = "avx2")]
-    unsafe fn determinant_avx2(&mut self) -> T
+    unsafe fn determinant_avx2(&mut self) -> Result<T, Error>
         where
         T: Mul<Output = T>,
         T: Sub<Output = T>,
@@ -348,7 +348,7 @@ impl<T: Copy> Matrix<T> {
         self.determinant_default()
     }
 
-    pub fn determinant_default(&mut self) -> T
+    pub fn determinant_default(&mut self) -> Result<T, Error>
         where
             T: Mul<Output=T>,
             T: Sub<Output=T>,
@@ -359,36 +359,41 @@ impl<T: Copy> Matrix<T> {
     {
         let mut sum: T = Zero::zero();
 
-        // If a 2x2 matrix just return the determinant
-        if self.num_rows() == 2 && self.num_cols() == 2 {
-            return self.minor();
-        }
-
-        // We will use row 1 for calculating the determinant (i.e. i stays as 0)
-        for j in 0..self.num_cols() {
-            // Extract the sub-matrix not containing row i and column j
-            let mut sub_matrix = self.get_sub_matrix(j, 0);
-            if sub_matrix.num_rows() == 2 && sub_matrix.num_cols() == 2 {
-                // Determinant of the 2x2 sub-matrix
-                let minor = sub_matrix.minor();
-                let mut cofactor = self[0][j] * minor;
-                // -1 ^ (i + j)
-                if j % 2 == 1 {
-                    cofactor = cofactor.neg();
-                }
-                sum += cofactor;
-            } else {
-                // Recursive call to work towards finding the determinant of the 2x2 sub-matrices
-                let mut cofactor = self[0][j] * sub_matrix.determinant();
-                // -1 ^ (i + j)
-                if j % 2 == 1 {
-                    cofactor = cofactor.neg();
-                }
-                sum += cofactor;
+        // Cannot calculate determinant of a 1x1 matrix
+        if self.num_rows() == 1 && self.num_cols() == 1 {
+            Err(anyhow!("Cannot calculate the determinant of a 1x1 matrix!"))
+        } else {
+            // If a 2x2 matrix just return the determinant
+            if self.num_rows() == 2 && self.num_cols() == 2 {
+                return Ok(self.minor());
             }
-        }
 
-        sum
+            // We will use row 1 for calculating the determinant (i.e. i stays as 0)
+            for j in 0..self.num_cols() {
+                // Extract the sub-matrix not containing row i and column j
+                let mut sub_matrix = self.get_sub_matrix(j, 0);
+                if sub_matrix.num_rows() == 2 && sub_matrix.num_cols() == 2 {
+                    // Determinant of the 2x2 sub-matrix
+                    let minor = sub_matrix.minor();
+                    let mut cofactor = self[0][j] * minor;
+                    // -1 ^ (i + j)
+                    if j % 2 == 1 {
+                        cofactor = cofactor.neg();
+                    }
+                    sum += cofactor;
+                } else {
+                    // Recursive call to work towards finding the determinant of the 2x2 sub-matrices
+                    let mut cofactor = self[0][j] * sub_matrix.determinant()?;
+                    // -1 ^ (i + j)
+                    if j % 2 == 1 {
+                        cofactor = cofactor.neg();
+                    }
+                    sum += cofactor;
+                }
+            }
+
+            Ok(sum)
+        }
     }
 
     pub fn cofactor_matrix(&mut self) -> Result<Self, Error>
@@ -463,7 +468,7 @@ impl<T: Copy> Matrix<T> {
                 for j in 0..self.num_rows() {
                     // Extract the sub-matrix not containing row i and column j
                     let mut sub_matrix = self.get_sub_matrix(i, j);
-                    let mut minor = sub_matrix.determinant();
+                    let mut minor = sub_matrix.determinant()?;
                     if (i + j) % 2 == 1 {
                         minor = minor.neg();
                     }
@@ -490,7 +495,7 @@ impl<T: Copy> Matrix<T> {
 
     {
         // First get the determinant
-        let determinant = self.determinant();
+        let determinant = self.determinant()?;
 
         // If the determinant is zero the inverse does not exist, return an error
         if determinant == Zero::zero() {
@@ -848,7 +853,7 @@ mod tests {
         [2, 3, 4, 1, 4], [3, 2, 3, 5, 4]]);
         let check = 21;
 
-        let res = m1.determinant();
+        let res = m1.determinant().unwrap();
 
         assert_eq!(res, check);
     }
